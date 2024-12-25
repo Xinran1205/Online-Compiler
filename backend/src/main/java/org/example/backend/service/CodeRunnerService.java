@@ -10,21 +10,41 @@ import java.nio.file.Path;
 @Service
 public class CodeRunnerService {
 
-    public String runCode(String code) {
+    /**
+     * 根据不同语言执行代码
+     */
+    public String runCode(String code, String language) {
+        switch (language.toLowerCase()) {
+            case "java":
+                return runJavaCode(code);
+            case "python":
+            default:
+                // 默认情况当成 python
+                return runPythonCode(code);
+        }
+    }
+
+    /**
+     * 运行 Python 代码
+     */
+    private String runPythonCode(String code) {
         Path tempFile = null;
         try {
-            // 创建临时文件
+            // 创建临时文件：后缀 .py
             tempFile = Files.createTempFile("user_code_", ".py");
-            // 使用 UTF-8 编码写入文件
+
+            // UTF-8 写入用户代码
             Files.write(tempFile, code.getBytes(StandardCharsets.UTF_8));
 
-            // 使用本机python3执行该文件
+            // 构建执行命令：python3 [tempFile]
             ProcessBuilder pb = new ProcessBuilder("python3", tempFile.toString());
-            pb.redirectErrorStream(true); // 将stderr合并到stdout
+            pb.redirectErrorStream(true); // 将 stderr 合并到 stdout
             Process process = pb.start();
 
             // 读取执行输出
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8)
+            );
             StringBuilder outputBuilder = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {
@@ -37,14 +57,91 @@ public class CodeRunnerService {
             }
 
             return outputBuilder.toString().trim();
+
         } catch (Exception e) {
             return "Error: " + e.getMessage();
         } finally {
-            // 清理临时文件
+            // 运行完毕后删除临时文件
             if (tempFile != null) {
                 try {
                     Files.deleteIfExists(tempFile);
-                } catch (Exception ignore) {}
+                } catch (IOException ignore) {}
+            }
+        }
+    }
+
+    /**
+     * 运行 Java 代码
+     * 注意：这里假设用户的代码中，含有一个 'public class Main' 且带有 main 方法。
+     * 如果要支持多 class 的场景，需要根据需求自己扩展。
+     */
+    private String runJavaCode(String code) {
+        // 注意：Java 运行分两步：先编译 javac，再运行 java
+        // 为简单演示，这里把用户代码写到 Main.java 并强制使用类名 Main
+        Path tempDir = null;
+        try {
+            // 1. 创建临时文件夹
+            tempDir = Files.createTempDirectory("java_code_");
+
+            // 2. 在临时文件夹里创建 Main.java
+            Path javaFilePath = tempDir.resolve("Main.java");
+            Files.write(javaFilePath, code.getBytes(StandardCharsets.UTF_8));
+
+            // 3. 编译：javac Main.java
+            ProcessBuilder compilePb = new ProcessBuilder("javac", javaFilePath.toString());
+            compilePb.redirectErrorStream(true);
+            Process compileProcess = compilePb.start();
+            BufferedReader compileReader = new BufferedReader(
+                    new InputStreamReader(compileProcess.getInputStream(), StandardCharsets.UTF_8)
+            );
+            StringBuilder compileOutput = new StringBuilder();
+            String line;
+            while ((line = compileReader.readLine()) != null) {
+                compileOutput.append(line).append("\n");
+            }
+
+            int compileExitCode = compileProcess.waitFor();
+            if (compileExitCode != 0) {
+                // 编译出错
+                return "Compile Error:\n" + compileOutput.toString().trim();
+            }
+
+            // 4. 运行：java Main
+            // 注意：要指定工作目录到临时文件夹，这样才能找到编译生成的 Main.class
+            ProcessBuilder runPb = new ProcessBuilder("java", "Main");
+            runPb.directory(tempDir.toFile());
+            runPb.redirectErrorStream(true);
+            Process runProcess = runPb.start();
+
+            BufferedReader runReader = new BufferedReader(
+                    new InputStreamReader(runProcess.getInputStream(), StandardCharsets.UTF_8)
+            );
+            StringBuilder runOutput = new StringBuilder();
+            while ((line = runReader.readLine()) != null) {
+                runOutput.append(line).append("\n");
+            }
+
+            int runExitCode = runProcess.waitFor();
+            if (runExitCode != 0) {
+                runOutput.append("Process exited with error code: ").append(runExitCode).append("\n");
+            }
+
+            return runOutput.toString().trim();
+
+        } catch (Exception e) {
+            return "Error: " + e.getMessage();
+        } finally {
+            // 清理临时文件夹（包括 .java, .class）
+            if (tempDir != null) {
+                try {
+                    Files.walk(tempDir)
+                            .sorted((p1, p2) -> p2.compareTo(p1)) // 先删文件再删目录
+                            .forEach(path -> {
+                                try {
+                                    Files.deleteIfExists(path);
+                                } catch (IOException ignore) {}
+                            });
+                } catch (IOException ignore) {}
             }
         }
     }

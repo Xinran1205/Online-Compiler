@@ -2,8 +2,8 @@ import React from 'react';
 
 const OutputDisplay = ({ output }) => {
   return (
-    <div className="output-container">
-      <h2>运行结果：</h2>
+    <div className="output-container" style={{ marginTop: '20px' }}>
+      <h2>Output：</h2>
       <pre>{output}</pre>
     </div>
   );
