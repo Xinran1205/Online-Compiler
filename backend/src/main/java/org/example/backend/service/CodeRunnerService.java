@@ -1,5 +1,6 @@
 package org.example.backend.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -9,6 +10,21 @@ import java.nio.file.Path;
 
 @Service
 public class CodeRunnerService {
+    @Autowired
+    private DockerSandboxService dockerSandboxService;
+
+    /**
+     *  根据语言分别调用沙箱里的python/java逻辑
+     */
+    public String runCodeSand(String code, String language) {
+        switch (language.toLowerCase()) {
+            case "java":
+                return dockerSandboxService.runJavaCodeInNewContainer(code);
+            case "python":
+            default:
+                return dockerSandboxService.runPythonCodeInNewContainer(code);
+        }
+    }
 
     /**
      * 根据不同语言执行代码
@@ -31,12 +47,15 @@ public class CodeRunnerService {
         Path tempFile = null;
         try {
             // 创建临时文件：后缀 .py
+            // createTempFile 方法会在前缀和后缀之间插入一串随机生成的字符，
+            // 以确保文件名的唯一性。这意味着每次调用该方法时，生成的文件名都是不同的，避免了命名冲突。
             tempFile = Files.createTempFile("user_code_", ".py");
 
             // UTF-8 写入用户代码
             Files.write(tempFile, code.getBytes(StandardCharsets.UTF_8));
 
             // 构建执行命令：python3 [tempFile]
+            // 进程创建：操作系统通过系统调用（如 fork 和 exec 在Unix系统中）创建一个新进程，并执行指定的命令。
             ProcessBuilder pb = new ProcessBuilder("python3", tempFile.toString());
             pb.redirectErrorStream(true); // 将 stderr 合并到 stdout
             Process process = pb.start();

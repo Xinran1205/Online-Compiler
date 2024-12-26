@@ -23,7 +23,9 @@ public class CodeRunnerController {
         // 注意：如果前端没传 language，你可以默认成 "python" 或者做个简单判断
 
         // 运行代码并得到输出
-        String output = codeRunnerService.runCode(code, language);
+        // String output = codeRunnerService.runCode(code, language);
+        // 尝试运行沙箱代码
+        String output = codeRunnerService.runCodeSand(code, language);
 
         // 返回结果
         Map<String, String> response = new HashMap<>();
