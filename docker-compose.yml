@@ -21,8 +21,11 @@ services:
     container_name: my-backend-container
     # 挂载宿主机 /var/run/docker.sock 到容器
     volumes:
+      # 允许后端容器内的应用（Spring Boot）与宿主机的 Docker 守护进程通信，进而管理和启动其他 Docker 容器（即沙箱环境）。
       - /var/run/docker.sock:/var/run/docker.sock
-      # 新增：把宿主机项目下的 tempfiles 映射到容器的 /mytemp
+      # 把宿主机项目下的 tempfiles 映射到容器的 /mytemp
+      # 在 Docker 中，挂载卷（Volumes） 是宿主机和容器之间共享文件和目录的一种机制。
+      # 通过挂载卷，容器内的应用可以访问宿主机上的文件系统，而无需关心宿主机的具体路径。
       - ./tempfiles:/mytemp
     environment:
       # 关键：通过 ${PWD} 传递 "宿主机上" tempfiles 的绝对路径

@@ -7,8 +7,6 @@ import java.io.InputStreamReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-
-import java.util.Comparator;
 import java.util.UUID;
 
 /**
@@ -26,11 +24,21 @@ public class DockerSandboxService {
      * 运行 Python 代码：在独立容器中执行
      */
 
+    // 在 Docker 中，挂载卷（Volumes） 是宿主机和容器之间共享文件和目录的一种机制。
+    // 通过挂载卷，容器内的应用可以访问宿主机上的文件系统，而无需关心宿主机的具体路径。
     public String runPythonCodeInNewContainer(String code) {
         Path tempDirInContainer = null;
         try {
             // 1) 在后端容器里（/mytemp）创建一个临时目录
+            // /mytemp 目录：
+            // 根据docker-compose.yml，宿主机的 ./tempfiles 目录被挂载到后端容器内的 /mytemp 目录。
+            // 这意味着在容器内 /mytemp 目录下创建的任何文件或目录，都会实际存储在宿主机的 ./tempfiles 目录中。
+            // 为什么这么做？这种做法使得代码不依赖于宿主机的具体路径，提高了代码的可移植性。
+            // 无论宿主机的实际路径是什么，容器内的应用始终通过 /mytemp 进行访问。这简化了代码逻辑，避免了在不同环境下修改代码以适应不同路径的问题。
+            // 只需要动配置文件即可
             Path containerMountedDir = Paths.get("/mytemp");
+            // 使用 Files.createTempDirectory 在 /mytemp 下创建一个以 py_sandbox_ 开头的临时目录，例如 /mytemp/py_sandbox_12345。
+            // 这个临时目录用于存放即将运行的 Python 脚本。
             tempDirInContainer = Files.createTempDirectory(containerMountedDir, "py_sandbox_");
 
             // 2) 写脚本到容器内 /mytemp/py_sandbox_xxx/script.py
@@ -46,6 +54,12 @@ public class DockerSandboxService {
 
             // 3) 通过 docker run -v <宿主机路径>:/workspace ...
             String containerName = "sandbox_python_" + UUID.randomUUID().toString().replaceAll("-", "");
+            // 参数解释：
+            // --rm：容器退出后自动删除，确保不留残余。
+            // --name：指定容器名称。
+            // -v /home/ubuntu/Online-Compiler/tempfiles/py_sandbox_12345:/workspace：将宿主机的临时目录挂载到容器内的 /workspace 目录。
+            // my-runner-image:latest：使用预先构建好的沙箱镜像。
+            // python3 /workspace/script.py：在容器内执行 Python 脚本。
             ProcessBuilder pb = new ProcessBuilder(
                     "docker", "run", "--rm",
                     "--name", containerName,
